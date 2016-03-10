@@ -1027,6 +1027,9 @@ private:
     void parachute_release();
     bool parachute_manual_release();
     void accel_cal_update(void);
+#if FIWT == ENABLED
+    void read_control_surfaces(void);
+#endif
 
 public:
     void mavlink_delay_cb();

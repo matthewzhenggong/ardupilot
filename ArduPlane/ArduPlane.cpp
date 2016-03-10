@@ -84,6 +84,9 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(update_is_flying_5Hz,    5,    100),
     SCHED_TASK(dataflash_periodic,     50,    300),
     SCHED_TASK(adsb_update,             1,    500),
+#if FIWT == ENABLED
+    SCHED_TASK(read_control_surfaces,   5,   1700),
+#endif
 };
 
 void Plane::setup() 
@@ -103,6 +106,7 @@ void Plane::setup()
 
     // initialise the main loop scheduler
     scheduler.init(&scheduler_tasks[0], ARRAY_SIZE(scheduler_tasks));
+
 }
 
 void Plane::loop()
