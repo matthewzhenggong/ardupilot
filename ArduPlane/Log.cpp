@@ -164,6 +164,9 @@ void Plane::Log_Write_Attitude(void)
     targets.z = 0;          //Plane does not have the concept of navyaw. This is a placeholder.
 
     DataFlash.Log_Write_Attitude(ahrs, targets);
+#if FIWT == ENABLED
+    // disable other logging
+#else
     if (quadplane.in_vtol_mode()) {
         DataFlash.Log_Write_PID(LOG_PIDR_MSG, quadplane.pid_rate_roll.get_pid_info() );
         DataFlash.Log_Write_PID(LOG_PIDP_MSG, quadplane.pid_rate_pitch.get_pid_info() );
@@ -188,6 +191,7 @@ void Plane::Log_Write_Attitude(void)
     sitl.Log_Write_SIMSTATE(&DataFlash);
 #endif
     DataFlash.Log_Write_POS(ahrs);
+#endif
 }
 
 

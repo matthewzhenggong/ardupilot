@@ -162,7 +162,11 @@ void Plane::ahrs_update()
 
     if (should_log(MASK_LOG_IMU)) {
         Log_Write_IMU();
+#if FIWT == ENABLED
+        // disable IMT logging
+#else
         DataFlash.Log_Write_IMUDT(ins);
+#endif
     }
 
     // calculate a scaled roll limit based on current pitch
