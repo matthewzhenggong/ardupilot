@@ -414,6 +414,15 @@ void Plane::Log_Write_Optflow()
 }
 #endif
 
+#if FIWT == ENABLED
+struct PACKED log_Elevon_Pos {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint16_t elevon1_mv;
+    uint16_t elevon2_mv;
+};
+#endif
+
 struct PACKED log_Arm_Disarm {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -486,6 +495,27 @@ void Plane::Log_Write_Home_And_Origin()
     }
 }
 
+#if FIWT == ENABLED
+void Plane::Log_Write_ElevonPos(void)
+{
+    for (int i=0; i<2; ++i) {
+        if (elevon_adc[i] == NULL && hal.analogin != NULL) {
+            elevon_adc[i] = hal.analogin->channel(13+i);
+            elevon_mv[i] = 0;
+        } else {
+            elevon_mv[i] = (uint16_t)(elevon_adc[i]->voltage_latest()*1000);
+        }
+    }
+    struct log_Elevon_Pos pkt = {
+        LOG_PACKET_HEADER_INIT(LOG_ELEVONPOS_MSG),
+        time_us         : AP_HAL::micros64(),
+        elevon1_mv      : elevon_mv[0],
+        elevon2_mv      : elevon_mv[1],
+    };
+    DataFlash.WriteBlock(&pkt, sizeof(pkt));
+}
+#endif
+
 static const struct LogStructure log_structure[] = {
     LOG_COMMON_STRUCTURES,
     { LOG_PERFORMANCE_MSG, sizeof(log_Performance), 
@@ -507,6 +537,10 @@ static const struct LogStructure log_structure[] = {
 #if OPTFLOW == ENABLED
     { LOG_OPTFLOW_MSG, sizeof(log_Optflow),
       "OF",   "QBffff",   "TimeUS,Qual,flowX,flowY,bodyX,bodyY" },
+#endif
+#if FIWT == ENABLED
+    { LOG_ELEVONPOS_MSG, sizeof(log_Elevon_Pos),
+      "ELV",   "QHH",   "TimeUS,elevon1,elevon2" },
 #endif
     TECS_LOG_FORMAT(LOG_TECS_MSG)
 };
@@ -598,6 +632,10 @@ void Plane::Log_Write_RC(void) {}
 void Plane::Log_Write_Baro(void) {}
 void Plane::Log_Write_Airspeed(void) {}
 void Plane::Log_Write_Home_And_Origin() {}
+
+ #if FIWT == ENABLED
+void Plane::Log_Write_ElevonPos() {}
+ #endif
 
  #if CLI_ENABLED == ENABLED
 void Plane::Log_Read(uint16_t log_num, int16_t start_page, int16_t end_page) {}

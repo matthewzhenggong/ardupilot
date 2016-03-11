@@ -85,7 +85,7 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(dataflash_periodic,     50,    300),
     SCHED_TASK(adsb_update,             1,    500),
 #if FIWT == ENABLED
-    SCHED_TASK(read_control_surfaces,   5,   1700),
+    SCHED_TASK(read_control_surfaces,  50,   1700),
 #endif
 };
 
@@ -103,6 +103,13 @@ void Plane::setup()
     rssi.init();
 
     init_ardupilot();
+
+#if FIWT == ENABLED
+    elevon_adc[0] = NULL;
+    elevon_adc[1] = NULL;
+    elevon_mv[0] = 0u;
+    elevon_mv[1] = 0u;
+#endif
 
     // initialise the main loop scheduler
     scheduler.init(&scheduler_tasks[0], ARRAY_SIZE(scheduler_tasks));
@@ -285,8 +292,12 @@ void Plane::update_logging2(void)
     if (should_log(MASK_LOG_NTUN))
         Log_Write_Nav_Tuning();
 
+#if FIWT == ENABLED
+    // ignore rc writing here
+#else
     if (should_log(MASK_LOG_RC))
         Log_Write_RC();
+#endif
 
     if (should_log(MASK_LOG_IMU))
         DataFlash.Log_Write_Vibration(ins);

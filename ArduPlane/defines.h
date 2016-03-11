@@ -119,6 +119,9 @@ enum log_messages {
     LOG_ARM_DISARM_MSG,
     LOG_STATUS_MSG,
     LOG_OPTFLOW_MSG
+#if FIWT == ENABLED
+   ,LOG_ELEVONPOS_MSG
+#endif
 };
 
 #define MASK_LOG_ATTITUDE_FAST          (1<<0)

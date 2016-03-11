@@ -20,9 +20,13 @@
 #include "Plane.h"
 
 #if FIWT == ENABLED
+
 void Plane::read_control_surfaces(void)
 {
-    gcs_send_text_fmt(MAV_SEVERITY_INFO, "read...\n");
+    if (should_log(MASK_LOG_RC)) {
+        Log_Write_RC();
+        Log_Write_ElevonPos();
+    }
 }
 #endif
 

@@ -780,6 +780,9 @@ private:
     void Log_Write_Airspeed(void);
     void Log_Write_Home_And_Origin();
     void Log_Write_Vehicle_Startup_Messages();
+#if FIWT == ENABLED
+    void Log_Write_ElevonPos(void);
+#endif
     void Log_Read(uint16_t log_num, int16_t start_page, int16_t end_page);
     void start_logging();
 
@@ -1029,6 +1032,8 @@ private:
     void accel_cal_update(void);
 #if FIWT == ENABLED
     void read_control_surfaces(void);
+    AP_HAL::AnalogSource *elevon_adc[2];
+    uint16_t elevon_mv[2];
 #endif
 
 public:
