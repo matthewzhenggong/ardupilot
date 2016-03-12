@@ -189,6 +189,7 @@ void Plane::read_radio()
         channel_roll->set_pwm(pwm_roll);
         channel_pitch->set_pwm(pwm_pitch);
     }
+    trigger_input_signal();
 
     control_failsafe(channel_throttle->radio_in);
 

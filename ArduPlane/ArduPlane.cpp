@@ -42,6 +42,9 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(stabilize,             400,   3500),
     SCHED_TASK(set_servos,            400,   1600),
     SCHED_TASK(read_control_switch,     7,   1000),
+#if FIWT == ENABLED
+    SCHED_TASK(read_control_surfaces,  50,   1700),
+#endif
     SCHED_TASK(gcs_retry_deferred,     50,   1000),
     SCHED_TASK(update_GPS_50Hz,        50,   2500),
     SCHED_TASK(update_GPS_10Hz,        10,   2500),
@@ -84,9 +87,6 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(update_is_flying_5Hz,    5,    100),
     SCHED_TASK(dataflash_periodic,     50,    300),
     SCHED_TASK(adsb_update,             1,    500),
-#if FIWT == ENABLED
-    SCHED_TASK(read_control_surfaces,  50,   1700),
-#endif
 };
 
 void Plane::setup() 

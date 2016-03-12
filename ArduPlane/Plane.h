@@ -1031,6 +1031,7 @@ private:
     bool parachute_manual_release();
     void accel_cal_update(void);
 #if FIWT == ENABLED
+    void trigger_input_signal(void);
     void read_control_surfaces(void);
     AP_HAL::AnalogSource *elevon_adc[2];
     uint16_t elevon_mv[2];
