@@ -87,7 +87,7 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(update_is_flying_5Hz,    5,    100),
     SCHED_TASK(dataflash_periodic,     50,    300),
     SCHED_TASK(adsb_update,             1,    500),
-#if FIWT == ENALBED
+#if FIWT == ENABLED
     SCHED_TASK(trigger_input_signal,   10,    500),
 #endif
 };

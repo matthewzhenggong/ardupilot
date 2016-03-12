@@ -1297,11 +1297,11 @@ const AP_Param::Info Plane::var_info[] = {
 
     // @Group: SIG_P_
     // @Path: SignalGenerator.cpp
-    //GOBJECT(pitch_signal, "SIG_P_",  SignalGenerator),
+    GOBJECT(pitch_signal, "SIG_P_",  SignalGenerator),
 
     // @Group: SIG_R_
     // @Path: SignalGenerator.cpp
-    //GOBJECT(roll_signal, "SIG_R_",  SignalGenerator),
+    GOBJECT(roll_signal, "SIG_R_",  SignalGenerator),
 
     AP_VAREND
 };
