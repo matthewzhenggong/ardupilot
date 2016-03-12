@@ -178,6 +178,10 @@ void Plane::read_radio()
 
     RC_Channel::set_pwm_all();
     
+#if FIWT == ENABLED
+    pwm_pitch += pitch_signal.update();
+    pwm_roll  += roll_signal.update();
+#endif
     if (control_mode == TRAINING) {
         // in training mode we don't want to use a deadzone, as we
         // want manual pass through when not exceeding attitude limits
@@ -189,7 +193,6 @@ void Plane::read_radio()
         channel_roll->set_pwm(pwm_roll);
         channel_pitch->set_pwm(pwm_pitch);
     }
-    trigger_input_signal();
 
     control_failsafe(channel_throttle->radio_in);
 

@@ -97,6 +97,9 @@
 #include <AP_ADSB/AP_ADSB.h>
 
 #include "quadplane.h"
+#if FIWT == ENABLED
+# include "SignalGenerator.h"
+#endif
 
 // Configuration
 #include "config.h"
@@ -728,11 +731,16 @@ private:
     // support for quadcopter-plane
     QuadPlane quadplane{ahrs};
 
+#if FIWT == ENABLED
+    SignalGenerator pitch_signal;
+    SignalGenerator roll_signal;
+#endif
+
 #if CONFIG_HAL_BOARD == HAL_BOARD_PX4
     // the crc of the last created PX4Mixer
     int32_t last_mixer_crc = -1;
 #endif // CONFIG_HAL_BOARD
-    
+
     void demo_servos(uint8_t i);
     void adjust_nav_pitch_throttle(void);
     void update_load_factor(void);

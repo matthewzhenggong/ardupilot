@@ -1295,6 +1295,14 @@ const AP_Param::Info Plane::var_info[] = {
     // @Path: ../libraries/AP_Notify/AP_Notify.cpp
     GOBJECT(notify, "NTF_",  AP_Notify),
 
+    // @Group: SIG_P_
+    // @Path: SignalGenerator.cpp
+    //GOBJECT(pitch_signal, "SIG_P_",  SignalGenerator),
+
+    // @Group: SIG_R_
+    // @Path: SignalGenerator.cpp
+    //GOBJECT(roll_signal, "SIG_R_",  SignalGenerator),
+
     AP_VAREND
 };
 

@@ -335,6 +335,9 @@ public:
         k_param_pidNavPitchAltitude, // unused
         k_param_pidWheelSteer, // unused
 
+        k_param_pitch_signal = 250,
+        k_param_roll_signal,
+
         k_param_DataFlash = 253, // Logging Group
 
         // 254,255: reserved
