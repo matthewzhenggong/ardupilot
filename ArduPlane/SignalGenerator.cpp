@@ -50,15 +50,19 @@ int16_t SignalGenerator::update(void) {
         switch (singal_type) {
         default:
             if (dt < (uint32_t)tc) {
+                sig = 0;
+            } else if (dt < 2u*(uint32_t)tc) {
                 if (direct)
                     sig = amplitude;
                 else
                     sig = -amplitude;
-            } else if (dt < 2*(uint32_t)tc) {
+            } else if (dt < 3*(uint32_t)tc) {
                 if (direct)
                     sig = -amplitude;
                 else
                     sig = amplitude;
+            } else if (dt < 13*(uint32_t)tc) {
+                sig = 0;
             } else {
                 stage = 0;
             }

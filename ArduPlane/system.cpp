@@ -749,6 +749,11 @@ bool Plane::should_log(uint32_t mask)
         return false;
     }
     bool ret = hal.util->get_soft_armed() || (g.log_bitmask & MASK_LOG_WHEN_DISARMED) != 0;
+#if FIWT == ENABLED
+    if (!ret) {
+        ret = pitch_signal.is_active() || roll_signal.is_active();
+    }
+#endif
     if (ret && !DataFlash.logging_started() && !in_log_download) {
         // we have to set in_mavlink_delay to prevent logging while
         // writing headers

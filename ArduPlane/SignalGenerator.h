@@ -26,6 +26,10 @@ public:
         stage = 0;
     }
 
+    bool is_active(void) {
+        return stage != 0;
+    }
+
     int16_t update(void);
 
 private:
