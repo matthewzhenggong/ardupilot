@@ -40,9 +40,11 @@ void Plane::trigger_input_signal(void)
                     if (pwm[i]>1700) {
                         gcs_send_text_fmt(MAV_SEVERITY_INFO, "trigger pitch doublet inputs");
                         pitch_signal.start();
+                        if (!enable_logging) enable_logging = true;
                     } else if (pwm[i]<1200) {
                         gcs_send_text_fmt(MAV_SEVERITY_INFO, "trigger roll doublet inputs");
                         roll_signal.start();
+                        if (!enable_logging) enable_logging = true;
                     } else {
                         pitch_signal.stop();
                         roll_signal.stop();
@@ -58,11 +60,11 @@ void Plane::trigger_input_signal(void)
                     }
                     break;
                 default :
-                    if (pwm[i]>1700) {
-
-                    } else {
-
-                    }
+                    enable_logging = !enable_logging;
+                    if (enable_logging)
+                        gcs_send_text_fmt(MAV_SEVERITY_INFO, "enable logging");
+                    else
+                        gcs_send_text_fmt(MAV_SEVERITY_INFO, "disable logging");
                     break;
                 }
             }

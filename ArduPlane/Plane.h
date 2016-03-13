@@ -734,6 +734,7 @@ private:
 #if FIWT == ENABLED
     SignalGenerator pitch_signal;
     SignalGenerator roll_signal;
+    bool enable_logging;
 #endif
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_PX4

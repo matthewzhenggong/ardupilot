@@ -112,6 +112,7 @@ void Plane::setup()
     elevon_adc[1] = NULL;
     elevon_mv[0] = 0u;
     elevon_mv[1] = 0u;
+    enable_logging = false;
 #endif
 
     // initialise the main loop scheduler
