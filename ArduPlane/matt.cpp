@@ -60,11 +60,13 @@ void Plane::trigger_input_signal(void)
                     }
                     break;
                 default :
-                    enable_logging = !enable_logging;
-                    if (enable_logging)
-                        gcs_send_text_fmt(MAV_SEVERITY_INFO, "enable logging");
-                    else
-                        gcs_send_text_fmt(MAV_SEVERITY_INFO, "disable logging");
+                    if (hal.util->get_soft_armed()) {
+                        enable_logging = !enable_logging;
+                        if (enable_logging)
+                            gcs_send_text_fmt(MAV_SEVERITY_INFO, "enable logging");
+                        else
+                            gcs_send_text_fmt(MAV_SEVERITY_INFO, "disable logging");
+                    }
                     break;
                 }
             }
