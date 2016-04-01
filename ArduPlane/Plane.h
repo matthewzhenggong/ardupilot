@@ -1,10 +1,8 @@
 /// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
+#pragma once
 
-#ifndef _PLANE_H
-#define _PLANE_H
-
-#define THISFIRMWARE "ArduPlane V3.5.0"
-#define FIRMWARE_VERSION 3,5,0,FIRMWARE_VERSION_TYPE_OFFICIAL
+#define THISFIRMWARE "ArduPlane V3.5.2"
+#define FIRMWARE_VERSION 3,5,2,FIRMWARE_VERSION_TYPE_OFFICIAL
 
 /*
    Lead developer: Andrew Tridgell
@@ -120,8 +118,8 @@ class AP_Arming_Plane : public AP_Arming
 {
 public:
     AP_Arming_Plane(const AP_AHRS &ahrs_ref, const AP_Baro &baro, Compass &compass,
-                    const enum HomeState &home_set) :
-        AP_Arming(ahrs_ref, baro, compass, home_set) {
+                    const AP_BattMonitor &battery, const enum HomeState &home_set) :
+        AP_Arming(ahrs_ref, baro, compass, battery, home_set) {
             AP_Param::setup_object_defaults(this, var_info);
     }
     bool pre_arm_checks(bool report);
@@ -710,7 +708,7 @@ private:
 #endif
 
     // Arming/Disarming mangement class
-    AP_Arming_Plane arming {ahrs, barometer, compass, home_is_set };
+    AP_Arming_Plane arming {ahrs, barometer, compass, battery, home_is_set };
 
     AP_Param param_loader {var_info};
 
@@ -1085,5 +1083,3 @@ extern Plane plane;
 
 using AP_HAL::millis;
 using AP_HAL::micros;
-
-#endif // _PLANE_H_

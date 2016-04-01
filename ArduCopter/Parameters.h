@@ -1,7 +1,5 @@
 // -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
-#ifndef PARAMETERS_H
-#define PARAMETERS_H
+#pragma once
 
 #include <AP_Common/AP_Common.h>
 
@@ -323,6 +321,7 @@ public:
         k_param_land_speed,
         k_param_auto_velocity_z_min, // remove
         k_param_auto_velocity_z_max, // remove - 219
+        k_param_land_speed_high,
 
         //
         // 220: PI/D Controllers
@@ -407,6 +406,7 @@ public:
     //
     AP_Int32        rtl_loiter_time;
     AP_Int16        land_speed;
+    AP_Int16        land_speed_high;
     AP_Int16        pilot_velocity_z_max;        // maximum vertical velocity the pilot may request
     AP_Int16        pilot_accel_z;               // vertical acceleration the pilot may request
 
@@ -589,6 +589,3 @@ public:
 };
 
 extern const AP_Param::Info        var_info[];
-
-#endif // PARAMETERS_H
-
