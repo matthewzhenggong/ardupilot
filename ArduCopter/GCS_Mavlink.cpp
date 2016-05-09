@@ -1812,6 +1812,8 @@ void GCS_MAVLINK::handleMessage(mavlink_message_t* msg)
         copter.compass.setHIL(0, packet.roll, packet.pitch, packet.yaw);
         copter.compass.setHIL(1, packet.roll, packet.pitch, packet.yaw);
 
+        copter.ahrs.reset_attitude(packet.roll, packet.pitch, packet.yaw);
+
         break;
     }
 #endif //  HIL_MODE != HIL_MODE_DISABLED
