@@ -382,6 +382,7 @@ void Plane::set_mode(enum FlightMode mode)
 
     // assume non-VTOL mode
     auto_state.vtol_mode = false;
+    auto_state.vtol_loiter = false;
     
     switch(control_mode)
     {
@@ -738,7 +739,7 @@ void Plane::servo_write(uint8_t ch, uint16_t pwm)
 #if HIL_SUPPORT
     if (g.hil_mode==1 && !g.hil_servos) {
         if (ch < 8) {
-            RC_Channel::rc_channel(ch)->radio_out = pwm;
+            RC_Channel::rc_channel(ch)->set_radio_out(pwm);
         }
         return;
     }
@@ -784,7 +785,7 @@ void Plane::frsky_telemetry_send(void)
  */
 int8_t Plane::throttle_percentage(void)
 {
-    if (auto_state.vtol_mode) {
+    if (quadplane.in_vtol_mode()) {
         return quadplane.throttle_percentage();
     }
     // to get the real throttle we need to use norm_output() which

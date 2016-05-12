@@ -159,9 +159,6 @@ void Plane::do_erase_logs(void)
 // Write an attitude packet
 void Plane::Log_Write_Attitude(void)
 {
-    if (!should_log(MASK_LOG_ATTITUDE_FAST)) {
-        return;
-    }
     Vector3f targets;       // Package up the targets into a vector for commonality with Copter usage of Log_Wrote_Attitude
     targets.x = nav_roll_cd;
     targets.y = nav_pitch_cd;
@@ -192,6 +189,14 @@ void Plane::Log_Write_Attitude(void)
     sitl.Log_Write_SIMSTATE(&DataFlash);
 #endif
     DataFlash.Log_Write_POS(ahrs);
+}
+
+// do logging at loop rate
+void Plane::Log_Write_Fast(void)
+{
+    if (should_log(MASK_LOG_ATTITUDE_FAST)) {
+        Log_Write_Attitude();
+    }
 }
 
 
@@ -260,8 +265,8 @@ void Plane::Log_Write_Control_Tuning()
         roll            : (int16_t)ahrs.roll_sensor,
         nav_pitch_cd    : (int16_t)nav_pitch_cd,
         pitch           : (int16_t)ahrs.pitch_sensor,
-        throttle_out    : (int16_t)channel_throttle->servo_out,
-        rudder_out      : (int16_t)channel_rudder->servo_out,
+        throttle_out    : (int16_t)channel_throttle->get_servo_out(),
+        rudder_out      : (int16_t)channel_rudder->get_servo_out(),
         throttle_dem    : (int16_t)SpdHgt_Controller->get_throttle_demand()
     };
     DataFlash.WriteBlock(&pkt, sizeof(pkt));
@@ -417,7 +422,7 @@ struct PACKED log_Arm_Disarm {
 
 void Plane::Log_Write_Current()
 {
-    DataFlash.Log_Write_Current(battery, channel_throttle->control_in);
+    DataFlash.Log_Write_Current(battery, channel_throttle->get_control_in());
 
     // also write power status
     DataFlash.Log_Write_Power();

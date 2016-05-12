@@ -146,13 +146,11 @@ def progress(text):
 
 def find_autotest_dir():
     '''return path to autotest directory'''
-    if os.path.exists("../Tools/autotest"):
-        return "../Tools/autotest"
-
-    # we are not running from one of the standard vehicle directories. Use
-    # the location of the sim_vehicle script to find the path
     return os.path.dirname(os.path.realpath(__file__))
 
+def find_root_dir():
+    '''return path to root directory'''
+    return os.path.realpath(os.path.join(find_autotest_dir(), '../..'))
 
 progress("Start")
 
@@ -172,7 +170,7 @@ group_build = optparse.OptionGroup(parser, "Build options")
 group_build.add_option("-N", "--no-rebuild", action='store_true', default=False, help="don't rebuild before starting ardupilot")
 group_build.add_option("-D", "--debug", action='store_true', default=False, help="build with debugging")
 group_build.add_option("-c", "--clean", action='store_true', default=False, help='do a make clean before building')
-group_build.add_option("-j", "--jobs", default=1, type='int', help='number of processors to use during build (default 1)')
+group_build.add_option("-j", "--jobs", default=None, type='int', help='number of processors to use during build (default for waf : number of processor, for make : 1)')
 group_build.add_option("-b", "--build-target", default=None, type='string', help='override SITL build target')
 group_build.add_option("-s", "--build-system", default="waf", type='choice', choices=["make", "waf"], help='build system to use')
 group_build.add_option("", "--no-rebuild-on-failure", dest="rebuild_on_failure", action='store_false', default=True, help='if build fails, do not clean and rebuild')
@@ -207,6 +205,9 @@ group.add_option("", "--console", default=False, action='store_true', help='load
 parser.add_option_group(group)
 
 opts, args = parser.parse_args()
+
+if opts.sim_vehicle_sh_compatible and opts.jobs is None:
+    opts.jobs = 1
 
 # validate parameters
 if opts.hil:
@@ -319,6 +320,10 @@ _options_for_frame = {
         "waf_target": "bin/arduplane",
         "default_params_filename": "ArduPlane.parm",
     },
+    "quadplane-tilttri" : {
+        "build_target" : "sitl-tri",
+        "default_params_filename": "quadplane-tilttri.parm",
+    },
     "quadplane": {
         "waf_target": "bin/arduplane",
         "default_params_filename": "quadplane.parm",
@@ -340,7 +345,7 @@ _options_for_frame = {
 _default_waf_target = {
     "ArduPlane": "bin/arduplane",
     "ArduCopter": "bin/arducopter-quad",
-    "APMRover2": "bin/ardurover",
+    "APMrover2": "bin/ardurover",
     "AntennaTracker": "bin/antennatracker",
 }
 
@@ -380,41 +385,36 @@ def options_for_frame(frame, vehicle, opts):
     return ret
 
 def do_build_waf(vehicledir, opts, frame_options):
-    '''build build_target (e.g. sitl) in directory vehicledir - using waf'''
+    '''build sitl using waf'''
     progress("WAF build")
 
     old_dir = os.getcwd()
-
-    root_dir = os.path.join(vehicledir, "..")
-
+    root_dir = find_root_dir()
     os.chdir(root_dir)
 
-    waf_light = "./modules/waf/waf-light"
+    waf_light = os.path.join(root_dir, "modules/waf/waf-light")
 
     cmd_configure = [waf_light, "configure", "--board", "sitl" ]
     if opts.debug:
         cmd_configure.append("--debug")
 
     run_cmd_blocking("Configure waf", cmd_configure)
-    p = subprocess.Popen(cmd_configure)
-    pid, sts = os.waitpid(p.pid,0)
 
     if opts.clean:
         run_cmd_blocking("Building clean", [waf_light, "clean"])
 
-    cmd_build = [waf_light, "-j", str(opts.jobs), "build", "--target", frame_options["waf_target"] ]
-    progress_cmd("Building", cmd_build)
-    p = subprocess.Popen(cmd_build)
-    pid, sts = os.waitpid(p.pid,0)
+    cmd_build = [waf_light, "build", "--target", frame_options["waf_target"]]
+    if opts.jobs is not None:
+        cmd_build += ['-j', str(opts.jobs)]
+
+    _, sts = run_cmd_blocking("Building", cmd_build)
 
     if sts != 0: # build failed
         if opts.rebuild_on_failure:
             progress("Build failed; cleaning and rebuilding")
             run_cmd_blocking("Building clean", [waf_light, "clean"])
 
-            progress_cmd("Building", cmd_build)
-            p = subprocess.Popen(cmd_build)
-            pid, sts = os.waitpid(p.pid,0)
+            _, sts = run_cmd_blocking("Building", cmd_build)
             if sts != 0:
                 progress("Build failed")
                 sys.exit(1)
@@ -442,16 +442,15 @@ def do_build(vehicledir, opts, frame_options):
     if opts.debug:
         build_target += "-debug"
 
-    build_cmd = ["make", "-j"+str(opts.jobs), build_target]
-    progress_cmd("Building %s" % (build_target), build_cmd)
+    build_cmd = ["make", build_target]
+    if opts.jobs is not None:
+        build_cmd += ['-j', str(opts.jobs)]
 
-    p = subprocess.Popen(build_cmd)
-    pid, sts = os.waitpid(p.pid,0)
+    _, sts = run_cmd_blocking("Building %s" % (build_target), build_cmd)
     if sts != 0:
         progress("Build failed; cleaning and rebuilding")
-        subprocess.Popen(["make", "clean"])
-        p = subprocess.Popen(["make", "-j"+str(opts.jobs), build_target])
-        pid, sts = os.waitpid(p.pid,0)
+        run_cmd_blocking("Cleaning", ["make", "clean"])
+        _, sts = run_cmd_blocking("Building %s" % (build_target), build_cmd)
         if sts != 0:
             progress("Build failed")
             sys.exit(1)
@@ -478,7 +477,7 @@ def progress_cmd(what, cmd):
 def run_cmd_blocking(what, cmd):
     progress_cmd(what, cmd)
     p = subprocess.Popen(cmd)
-    pid, sts = os.waitpid(p.pid,0)
+    return os.waitpid(p.pid,0)
 
 def run_in_terminal_window(autotest, name, cmd):
     '''execute the run_in_terminal_window.sh command for cmd'''
@@ -600,12 +599,10 @@ frame_options = options_for_frame(opts.frame, opts.vehicle, opts)
 if frame_options["model"] == "jsbsim":
     check_jsbsim_version()
 
-vehicledir = os.path.join(find_autotest_dir(), "../../" + opts.vehicle)
+vehicledir = os.path.realpath(os.path.join(find_root_dir(), opts.vehicle))
 if not os.path.exists(vehicledir):
     print("vehicle directory (%s) does not exist" % (vehicledir,))
     sys.exit(1)
-
-os.environ['AUTOTEST'] = find_autotest_dir() # should we only drop this in subprocess env?
 
 if not opts.hil:
     if opts.instance == 0:
@@ -629,7 +626,11 @@ else:
         do_build(vehicledir, opts, frame_options)
 
     if opts.build_system == "waf":
-        vehicle_binary = os.path.join(vehicledir, "../build/sitl", frame_options["waf_target"])
+        if opts.debug:
+            binary_basedir = "build/sitl-debug"
+        else:
+            binary_basedir = "build/sitl"
+        vehicle_binary = os.path.join(find_root_dir(), binary_basedir, frame_options["waf_target"])
     else:
         vehicle_binary = os.path.join(vehicledir, opts.vehicle+".elf")
 

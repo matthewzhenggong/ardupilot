@@ -526,6 +526,7 @@ bool Replay::find_log_info(struct log_information &info)
     int samplecount = 0;
     uint64_t prev = 0;
     uint64_t smallest_delta = 0;
+    uint64_t total_delta = 0;
     prev = 0;
     const uint16_t samples_required = 1000;
     while (samplecount < samples_required) {
@@ -557,17 +558,22 @@ bool Replay::find_log_info(struct log_information &info)
             samplecount = 0;
             prev = 0;
             smallest_delta = 0;
+            total_delta = 0;
         }
         if (streq(type, clock_source)) {
             if (prev == 0) {
                 prev = reader.last_clock_timestamp;
             } else {
                 uint64_t delta = reader.last_clock_timestamp - prev;
-                if (smallest_delta == 0 || delta < smallest_delta) {
-                    smallest_delta = delta;
+                if (delta < 40000 && delta > 1000) {
+                    if (smallest_delta == 0 || delta < smallest_delta) {
+                        smallest_delta = delta;
+                    }
+                    samplecount++;
+                    total_delta += delta;
                 }
-                samplecount++;
             }
+            prev = reader.last_clock_timestamp;
         }
 
         if (streq(type, "IMU2")) {
@@ -585,7 +591,10 @@ bool Replay::find_log_info(struct log_information &info)
         return false;
     }
 
-    float rate = 1.0e6f/smallest_delta;
+    float average_delta = total_delta / samplecount;
+    float rate = 1.0e6f/average_delta;
+    printf("average_delta=%.2f smallest_delta=%lu samplecount=%lu\n",
+           average_delta, (unsigned long)smallest_delta, (unsigned long)samplecount);
     if (rate < 100) {
         info.update_rate = 50;
     } else {
@@ -863,7 +872,7 @@ void Replay::log_check_solution(void)
 
     float roll_error  = degrees(fabsf(euler.x - check_state.euler.x));
     float pitch_error = degrees(fabsf(euler.y - check_state.euler.y));
-    float yaw_error = wrap_180_cd_float(100*degrees(fabsf(euler.z - check_state.euler.z)))*0.01f;
+    float yaw_error = wrap_180_cd(100*degrees(fabsf(euler.z - check_state.euler.z)))*0.01f;
     float vel_error = (velocity - check_state.velocity).length();
     float pos_error = get_distance(check_state.pos, loc);
 
