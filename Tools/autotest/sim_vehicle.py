@@ -8,6 +8,7 @@ import optparse
 import sys
 import atexit
 import os
+import os.path
 import subprocess
 import tempfile
 import getpass
@@ -113,6 +114,8 @@ def kill_tasks():
 
     import psutil
     for proc in psutil.process_iter():
+        if proc.status() == psutil.STATUS_ZOMBIE:
+            continue
         if proc.name() in victim_names:
             proc.kill()
 
@@ -123,7 +126,12 @@ def check_jsbsim_version():
     '''assert that the JSBSim we will run is the one we expect to run'''
     jsbsim_cmd = ["JSBSim", "--version"]
     progress_cmd("Get JSBSim version", jsbsim_cmd)
-    jsbsim_version = subprocess.Popen(jsbsim_cmd, stdout=subprocess.PIPE).communicate()[0]
+    try:
+        jsbsim_version = subprocess.Popen(jsbsim_cmd, stdout=subprocess.PIPE).communicate()[0]
+    except OSError as e:
+        jsbsim_version = '' # this value will trigger the ".index"
+                            # check below and produce a reasonable
+                            # error message
     try:
         jsbsim_version.index("ArduPilot")
     except ValueError:
@@ -193,6 +201,7 @@ group_sim.add_option("-S", "--speedup", default=1, type='int', help='set simulat
 group_sim.add_option("-t", "--tracker-location", default='CMAC_PILOTSBOX', type='string', help='set antenna tracker start location')
 group_sim.add_option("-w", "--wipe-eeprom", action='store_true', default=False, help='wipe EEPROM and reload parameters')
 group_sim.add_option("-m", "--mavproxy-args", default=None, type='string', help='additional arguments to pass to mavproxy.py')
+group_sim.add_option("", "--strace", action='store_true', default=False, help="strace the ArduPilot binary")
 parser.add_option_group(group_sim)
 
 
@@ -217,10 +226,20 @@ if opts.hil:
     if opts.gdb or opts.gdb_stopped:
         print("May not use gdb with hil")
         sys.exit(1)
+    if opts.strace:
+        print("May not use strace with hil")
+        sys.exit(1)
 
 if opts.valgrind and (opts.gdb or opts.gdb_stopped):
     print("May not use valgrind with gdb")
     sys.exit(1)
+
+if opts.strace and (opts.gdb or opts.gdb_stopped):
+    print("May not use strace with gdb")
+    sys.exit(1)
+
+if opts.strace and opts.valgrind:
+    print("valgrind and strace almost certainly not a good idea")
 
 # magically determine vehicle type (if required):
 if opts.vehicle is None:
@@ -253,6 +272,9 @@ default_params_filename: filename of default parameters file.  Taken to be relat
 extra_mavlink_cmds: extra parameters that will be passed to mavproxy
 '''
 _options_for_frame = {
+    "calibration": {
+        "extra_mavlink_cmds": "module load sitl_calibration;",
+    },
     "+": {
         "waf_target": "bin/arducopter-quad",
         "default_params_filename": "copter_params.parm"
@@ -339,6 +361,10 @@ _options_for_frame = {
     "plane": {
         "waf_target": "bin/arduplane",
         "default_params_filename": "plane.parm",
+    },
+    "rover": {
+        "waf_target": "bin/ardurover",
+        "default_params_filename": "Rover.parm",
     },
 }
 
@@ -474,9 +500,9 @@ def progress_cmd(what, cmd):
     shell_text = "%s" % (" ".join([ '"%s"' % x for x in cmd ]))
     progress(shell_text)
 
-def run_cmd_blocking(what, cmd):
+def run_cmd_blocking(what, cmd, **kw):
     progress_cmd(what, cmd)
-    p = subprocess.Popen(cmd)
+    p = subprocess.Popen(cmd, **kw)
     return os.waitpid(p.pid,0)
 
 def run_in_terminal_window(autotest, name, cmd):
@@ -521,6 +547,11 @@ def start_vehicle(vehicle_binary, autotest, opts, stuff, loc):
         gdb_commands_file.close()
         cmd.extend(["-x", gdb_commands_file.name])
         cmd.append("--args")
+    if opts.strace:
+        cmd_name += " (strace)"
+        cmd.append("strace")
+        strace_options = [ '-o', vehicle_binary + '.strace', '-s' , '8000', '-ttt' ]
+        cmd.extend(strace_options)
 
     cmd.append(vehicle_binary)
     cmd.append("-S")
@@ -579,7 +610,7 @@ def start_mavproxy(opts, stuff):
     if opts.mavproxy_args:
         cmd.extend(opts.mavproxy_args.split(" ")) # this could be a lot better..
 
-    # compatability pass-through parameters (for those that don't want
+    # compatibility pass-through parameters (for those that don't want
     # to use -C :-)
     for out in opts.out:
         cmd.extend(['--out', out])
@@ -591,7 +622,12 @@ def start_mavproxy(opts, stuff):
     if len(extra_cmd):
         cmd.extend(['--cmd', extra_cmd])
 
-    run_cmd_blocking("Run MavProxy", cmd)
+    local_mp_modules_dir = os.path.abspath(
+            os.path.join(__file__, '..', '..', 'mavproxy_modules'))
+    env = dict(os.environ)
+    env['PYTHONPATH'] = local_mp_modules_dir + os.pathsep + env.get('PYTHONPATH', '')
+
+    run_cmd_blocking("Run MavProxy", cmd, env=env)
     progress("MAVProxy exitted")
 
 frame_options = options_for_frame(opts.frame, opts.vehicle, opts)
