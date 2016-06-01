@@ -21,7 +21,7 @@
 #include <drivers/drv_pwm_output.h>
 #include <systemlib/mixer/mixer.h>
 #include <modules/px4iofirmware/protocol.h>
-#include <GCS_MAVLink/include/mavlink/v1.0/checksum.h>
+#include <GCS_MAVLink/include/mavlink/v2.0/checksum.h>
 
 #define PX4_LIM_RC_MIN 900
 #define PX4_LIM_RC_MAX 2100
@@ -276,7 +276,7 @@ bool Plane::setup_failsafe_mixing(void)
     // it twice as there have been reports that this call can fail
     // with a small probability
     hal.rcout->force_safety_on();
-    hal.rcout->force_safety_on();
+    hal.rcout->force_safety_no_wait();
 
     /* reset any existing mixer in px4io. This shouldn't be needed,
      * but is good practice */
@@ -391,7 +391,6 @@ failed:
     }
     // restore safety state if it was previously armed
     if (old_state == AP_HAL::Util::SAFETY_ARMED) {
-        hal.rcout->force_safety_off();
         hal.rcout->force_safety_off();
     }
     return ret;

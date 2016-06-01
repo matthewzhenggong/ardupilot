@@ -1,5 +1,7 @@
 // -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 
+#include "GCS_Mavlink.h"
+
 #include "Plane.h"
 #include "version.h"
 
@@ -93,13 +95,10 @@ void Plane::send_heartbeat(mavlink_channel_t chan)
     // indicate we have set a custom mode
     base_mode |= MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
 
-    mavlink_msg_heartbeat_send(
-        chan,
-        MAV_TYPE_FIXED_WING,
-        MAV_AUTOPILOT_ARDUPILOTMEGA,
-        base_mode,
-        custom_mode,
-        system_status);
+    gcs[chan-MAVLINK_COMM_0].send_heartbeat(MAV_TYPE_FIXED_WING,
+                                            base_mode,
+                                            custom_mode,
+                                            system_status);
 }
 
 void Plane::send_attitude(mavlink_channel_t chan)
@@ -621,27 +620,15 @@ void Plane::send_current_waypoint(mavlink_channel_t chan)
     mavlink_msg_mission_current_send(chan, mission.get_current_nav_index());
 }
 
-// are we still delaying telemetry to try to avoid Xbee bricking?
-bool Plane::telemetry_delayed(mavlink_channel_t chan)
+uint32_t GCS_MAVLINK_Plane::telem_delay() const
 {
-    uint32_t tnow = millis() >> 10;
-    if (tnow > (uint32_t)g.telem_delay) {
-        return false;
-    }
-    if (chan == MAVLINK_COMM_0 && hal.gpio->usb_connected()) {
-        // this is USB telemetry, so won't be an Xbee
-        return false;
-    }
-    // we're either on the 2nd UART, or no USB cable is connected
-    // we need to delay telemetry by the TELEM_DELAY time
-    return true;
+    return (uint32_t)(plane.g.telem_delay);
 }
 
-
 // try to send a message, return false if it won't fit in the serial tx buffer
-bool GCS_MAVLINK::try_send_message(enum ap_message id)
+bool GCS_MAVLINK_Plane::try_send_message(enum ap_message id)
 {
-    if (plane.telemetry_delayed(chan)) {
+    if (telemetry_delayed(chan)) {
         return false;
     }
 
@@ -978,20 +965,8 @@ const AP_Param::GroupInfo GCS_MAVLINK::var_info[] = {
     AP_GROUPEND
 };
 
-float GCS_MAVLINK::adjust_rate_for_stream_trigger(enum streams stream_num)
-{
-    // send at a much lower rate while handling waypoints and
-    // parameter sends
-    if ((stream_num != STREAM_PARAMS) && 
-        (waypoint_receiving || _queued_parameter != NULL)) {
-        return 0.25f;
-    }
-
-    return 1.0f;
-}
-
 void
-GCS_MAVLINK::data_stream_send(void)
+GCS_MAVLINK_Plane::data_stream_send(void)
 {
     plane.gcs_out_of_time = false;
 
@@ -1113,7 +1088,7 @@ GCS_MAVLINK::data_stream_send(void)
   handle a request to switch to guided mode. This happens via a
   callback from handle_mission_item()
  */
-bool GCS_MAVLINK::handle_guided_request(AP_Mission::Mission_Command &cmd)
+bool GCS_MAVLINK_Plane::handle_guided_request(AP_Mission::Mission_Command &cmd)
 {
     if (plane.control_mode != GUIDED) {
         // only accept position updates when in GUIDED mode
@@ -1135,7 +1110,7 @@ bool GCS_MAVLINK::handle_guided_request(AP_Mission::Mission_Command &cmd)
   handle a request to change current WP altitude. This happens via a
   callback from handle_mission_item()
  */
-void GCS_MAVLINK::handle_change_alt_request(AP_Mission::Mission_Command &cmd)
+void GCS_MAVLINK_Plane::handle_change_alt_request(AP_Mission::Mission_Command &cmd)
 {
     plane.next_WP_loc.alt = cmd.content.location.alt;
     if (cmd.content.location.flags.relative_alt) {
@@ -1146,7 +1121,7 @@ void GCS_MAVLINK::handle_change_alt_request(AP_Mission::Mission_Command &cmd)
     plane.reset_offset_altitude();
 }
 
-void GCS_MAVLINK::handleMessage(mavlink_message_t* msg)
+void GCS_MAVLINK_Plane::handleMessage(mavlink_message_t* msg)
 {
     switch (msg->msgid) {
 
@@ -1336,12 +1311,16 @@ void GCS_MAVLINK::handleMessage(mavlink_message_t* msg)
             break;
 
         case MAV_CMD_PREFLIGHT_CALIBRATION:
-            if(hal.util->get_soft_armed()) {
-                result = MAV_RESULT_FAILED;
-                break;
-            }
             plane.in_calibration = true;
             if (is_equal(packet.param1,1.0f)) {
+                /*
+                  gyro calibration
+                 */
+                if (hal.util->get_soft_armed()) {
+                    send_text(MAV_SEVERITY_WARNING, "No calibration while armed");
+                    result = MAV_RESULT_FAILED;
+                    break;
+                }
                 plane.ins.init_gyro();
                 if (plane.ins.gyro_calibrated_ok_all()) {
                     plane.ahrs.reset_gyro_drift();
@@ -1350,15 +1329,39 @@ void GCS_MAVLINK::handleMessage(mavlink_message_t* msg)
                     result = MAV_RESULT_FAILED;
                 }
             } else if (is_equal(packet.param3,1.0f)) {
-                plane.init_barometer();
+                /*
+                  baro and airspeed calibration
+                 */
+                if (hal.util->get_soft_armed() && plane.is_flying()) {
+                    send_text(MAV_SEVERITY_WARNING, "No calibration while flying");
+                    result = MAV_RESULT_FAILED;
+                    break;
+                }
+                plane.init_barometer(false);
                 if (plane.airspeed.enabled()) {
                     plane.zero_airspeed(false);
                 }
                 result = MAV_RESULT_ACCEPTED;
             } else if (is_equal(packet.param4,1.0f)) {
+                /*
+                  radio trim
+                 */
+                if (hal.util->get_soft_armed()) {
+                    send_text(MAV_SEVERITY_WARNING, "No calibration while armed");
+                    result = MAV_RESULT_FAILED;
+                    break;
+                }
                 plane.trim_radio();
                 result = MAV_RESULT_ACCEPTED;
             } else if (is_equal(packet.param5,1.0f)) {
+                /*
+                  accel calibration
+                 */
+                if (hal.util->get_soft_armed()) {
+                    send_text(MAV_SEVERITY_WARNING, "No calibration while armed");
+                    result = MAV_RESULT_FAILED;
+                    break;
+                }
                 result = MAV_RESULT_ACCEPTED;
                 // start with gyro calibration
                 plane.ins.init_gyro();
@@ -1372,6 +1375,14 @@ void GCS_MAVLINK::handleMessage(mavlink_message_t* msg)
                 plane.ins.get_acal()->start(this);
 
             } else if (is_equal(packet.param5,2.0f)) {
+                /*
+                  ahrs trim
+                 */
+                if (hal.util->get_soft_armed()) {
+                    send_text(MAV_SEVERITY_WARNING, "No calibration while armed");
+                    result = MAV_RESULT_FAILED;
+                    break;
+                }
                 // start with gyro calibration
                 plane.ins.init_gyro();
                 // accel trim
@@ -2074,6 +2085,10 @@ void GCS_MAVLINK::handleMessage(mavlink_message_t* msg)
     case MAVLINK_MSG_ID_ADSB_VEHICLE:
         plane.adsb.update_vehicle(msg);
         break;
+
+    case MAVLINK_MSG_ID_SETUP_SIGNING:
+        handle_setup_signing(msg);
+        break;
     } // end switch
 } // end handle mavlink
 
@@ -2191,8 +2206,7 @@ void Plane::gcs_send_airspeed_calibration(const Vector3f &vg)
 {
     for (uint8_t i=0; i<num_gcs; i++) {
         if (gcs[i].initialised) {
-            if (comm_get_txspace((mavlink_channel_t)i) - MAVLINK_NUM_NON_PAYLOAD_BYTES >= 
-                MAVLINK_MSG_ID_AIRSPEED_AUTOCAL_LEN) {
+            if (HAVE_PAYLOAD_SPACE((mavlink_channel_t)i, AIRSPEED_AUTOCAL)) {
                 airspeed.log_mavlink_send((mavlink_channel_t)i, vg);
             }
         }

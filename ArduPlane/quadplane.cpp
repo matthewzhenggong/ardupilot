@@ -590,7 +590,7 @@ bool QuadPlane::is_flying(void)
     if (!available()) {
         return false;
     }
-    if (motors->get_throttle() > 0.2 && !motors->limit.throttle_lower) {
+    if (motors->get_throttle() > 0.1 && !motors->limit.throttle_lower) {
         return true;
     }
     return false;
@@ -850,7 +850,12 @@ void QuadPlane::update_transition(void)
 
     if (transition_state < TRANSITION_TIMER) {
         // set a single loop pitch limit in TECS
-        plane.TECS_controller.set_pitch_max_limit(transition_pitch_max);
+        if (plane.ahrs.groundspeed() < 3) {
+            // until we have some ground speed limit to zero pitch
+            plane.TECS_controller.set_pitch_max_limit(0);
+        } else {
+            plane.TECS_controller.set_pitch_max_limit(transition_pitch_max);
+        }
     } else if (transition_state < TRANSITION_DONE) {
         plane.TECS_controller.set_pitch_max_limit((transition_pitch_max+1)*2);
     }
@@ -958,6 +963,10 @@ void QuadPlane::motors_output(void)
     if (motors->armed()) {
         plane.DataFlash.Log_Write_Rate(plane.ahrs, *motors, *attitude_control, *pos_control);
         Log_Write_QControl_Tuning();
+        uint32_t now = AP_HAL::millis();
+        if (now - last_ctrl_log_ms > 100) {
+            attitude_control->control_monitor_log();
+        }
     }
 }
 
