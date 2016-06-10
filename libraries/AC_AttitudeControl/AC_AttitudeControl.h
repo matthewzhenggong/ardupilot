@@ -359,13 +359,15 @@ private:
       state of control monitoring
     */
     struct {
-        float rms_roll;
-        float rms_pitch;
+        float rms_roll_P;
+        float rms_roll_D;
+        float rms_pitch_P;
+        float rms_pitch_D;
         float rms_yaw;
     } _control_monitor;
 
     // update state in ControlMonitor
-    void control_monitor_filter_pid(const DataFlash_Class::PID_Info &pid_info, float &rms);
+    void control_monitor_filter_pid(float value, float &rms_P);
     void control_monitor_update(void);
 
 public:
@@ -374,6 +376,10 @@ public:
 
     // return current RMS controller filter for each axis
     float control_monitor_rms_output_roll(void) const;
+    float control_monitor_rms_output_roll_P(void) const;
+    float control_monitor_rms_output_roll_D(void) const;
+    float control_monitor_rms_output_pitch_P(void) const;
+    float control_monitor_rms_output_pitch_D(void) const;
     float control_monitor_rms_output_pitch(void) const;
     float control_monitor_rms_output_yaw(void) const;
 };

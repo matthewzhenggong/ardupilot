@@ -210,6 +210,7 @@ private:
     
     // alt to switch to QLAND_FINAL
     AP_Float land_final_alt;
+    AP_Float vel_forward_alt_cutoff;
     
     AP_Int8 enable;
     AP_Int8 transition_pitch_max;
@@ -219,11 +220,15 @@ private:
 
     // control if a VTOL GUIDED will be used
     AP_Int8 guided_mode;
+
+    // control ESC throttle calibration
+    AP_Int8 esc_calibration;
+    void run_esc_calibration(void);
     
     struct {
         AP_Float gain;
         float integrator;
-        uint32_t lastt_ms;
+        uint32_t last_ms;
         int8_t last_pct;
     } vel_forward;
 

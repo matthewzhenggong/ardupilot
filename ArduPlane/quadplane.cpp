@@ -235,7 +235,7 @@ const AP_Param::GroupInfo QuadPlane::var_info[] = {
 
     // @Param: VFWD_GAIN
     // @DisplayName: Forward velocity hold gain
-    // @Description: Controls use of forward motor in vtol modes. If this is zero then the forward motor will not be used for position control in VTOL modes. A value of 0.1 is a good place to start if you want to use the forward motor for position control. No forward motor will be used in QSTABILIZE or QHOVER modes. Use QLOITER for position hold with the forward motor.
+    // @Description: Controls use of forward motor in vtol modes. If this is zero then the forward motor will not be used for position control in VTOL modes. A value of 0.05 is a good place to start if you want to use the forward motor for position control. No forward motor will be used in QSTABILIZE or QHOVER modes. Use QLOITER for position hold with the forward motor.
     // @Range: 0 0.5
     // @Increment: 0.01
     // @User: Standard
@@ -243,7 +243,7 @@ const AP_Param::GroupInfo QuadPlane::var_info[] = {
 
     // @Param: WVANE_GAIN
     // @DisplayName: Weathervaning gain
-    // @Description: This controls the tendency to yaw to face into the wind. A value of 0.4 is good for reasonably quick wind direction correction. The weathervaning works by turning into the direction of roll.
+    // @Description: This controls the tendency to yaw to face into the wind. A value of 0.1 is to start with and will give a slow turn into the wind. Use a value of 0.4 for more rapid response. The weathervaning works by turning into the direction of roll.
     // @Range: 0 1
     // @Increment: 0.01
     // @User: Standard
@@ -312,6 +312,21 @@ const AP_Param::GroupInfo QuadPlane::var_info[] = {
     // @Increment: 1
     // @User: Standard
     AP_GROUPINFO("THR_MIN", 41, QuadPlane, throttle_min,  100),
+
+    // @Param: ESC_CAL
+    // @DisplayName: ESC Calibration
+    // @Description: This is used to calibrate the throttle range of the VTOL motors. Please read http://ardupilot.org/plane/docs/quadplane-esc-calibration.html before using. This parameter is automatically set back to 0 on every boot. This parameter only takes effect in QSTABILIZE mode. When set to 1 the output of all motors will come directly from the throttle stick when armed, and will be zero when disarmed. When set to 2 the output of all motors will be maximum when armed and zero when disarmed. Make sure you remove all properllers before using.
+    // @Values: 0:Disabled,1:ThrottleInput,2:FullInput
+    // @User: Standard
+    AP_GROUPINFO("ESC_CAL", 42, QuadPlane, esc_calibration,  0),
+
+    // @Param: VFWD_ALT
+    // @DisplayName: Forward velocity alt cutoff
+    // @Description: Controls altitude to disable forward velocity assist when below this relative altitude. This is useful to keep the forward velocity propeller from hitting the ground. Rangefinder height data is incorporated when available.
+    // @Range: 0 10
+    // @Increment: 0.25
+    // @User: Standard
+    AP_GROUPINFO("VFWD_ALT", 43, QuadPlane, vel_forward_alt_cutoff,  0),
     
     AP_GROUPEND
 };
@@ -473,7 +488,37 @@ void QuadPlane::setup_defaults(void)
             AP_HAL::panic("quadplane bad default %s", defaults_table[i].name);
         }
     }
+
+    // reset ESC calibration
+    if (esc_calibration != 0) {
+        esc_calibration.set_and_save(0);
+    }
 }
+
+// run ESC calibration
+void QuadPlane::run_esc_calibration(void)
+{
+    if (!motors->armed()) {
+        motors->set_throttle_passthrough_for_esc_calibration(0);
+        AP_Notify::flags.esc_calibration = false;
+        return;
+    }
+    if (!AP_Notify::flags.esc_calibration) {
+        GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "Starting ESC calibration");        
+    }
+    AP_Notify::flags.esc_calibration = true;
+    switch (esc_calibration) {
+    case 1:
+        // throttle based calibration
+        motors->set_throttle_passthrough_for_esc_calibration(plane.channel_throttle->get_control_in() * 0.01f);
+        break;
+    case 2:
+        // full range calibration
+        motors->set_throttle_passthrough_for_esc_calibration(1);
+        break;
+    }
+}
+
 
 // init quadplane stabilize mode 
 void QuadPlane::init_stabilize(void)
@@ -502,6 +547,13 @@ void QuadPlane::hold_stabilize(float throttle_in)
 // quadplane stabilize mode
 void QuadPlane::control_stabilize(void)
 {
+    // special check for ESC calibration in QSTABILIZE
+    if (esc_calibration != 0) {
+        run_esc_calibration();
+        return;
+    }
+
+    // normal QSTABILIZE mode
     float pilot_throttle_scaled = plane.channel_throttle->get_control_in() / 100.0f;
     hold_stabilize(pilot_throttle_scaled);
 
@@ -684,12 +736,7 @@ void QuadPlane::control_loiter()
     plane.nav_pitch_cd = wp_nav->get_pitch();
 
     if (plane.control_mode == QLAND) {
-        float height_above_ground;
-        if (plane.g.rangefinder_landing && plane.rangefinder_state.in_range) {
-            height_above_ground = plane.rangefinder_state.height_estimate;
-        } else {
-            height_above_ground = plane.adjusted_relative_altitude_cm() * 0.01;
-        }
+        float height_above_ground = plane.relative_ground_altitude(plane.g.rangefinder_landing);
         if (height_above_ground < land_final_alt && poscontrol.state < QPOS_LAND_FINAL) {
             poscontrol.state = QPOS_LAND_FINAL;
         }
@@ -841,6 +888,9 @@ void QuadPlane::update_transition(void)
          plane.channel_throttle->get_control_in()>0 ||
          plane.is_flying())) {
         // the quad should provide some assistance to the plane
+        if (transition_state != TRANSITION_AIRSPEED_WAIT) {
+            GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "Transition started airspeed %.1f", aspeed);
+        }
         transition_state = TRANSITION_AIRSPEED_WAIT;
         transition_start_ms = millis();
         assisted_flight = true;
@@ -890,7 +940,8 @@ void QuadPlane::update_transition(void)
             transition_state = TRANSITION_DONE;
             GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "Transition done");
         }
-        float throttle_scaled = last_throttle * (transition_time_ms - (millis() - transition_start_ms)) / (float)transition_time_ms;
+        float trans_time_ms = (float)transition_time_ms.get();
+        float throttle_scaled = last_throttle * (trans_time_ms - (millis() - transition_start_ms)) / trans_time_ms;
         if (throttle_scaled < 0) {
             throttle_scaled = 0;
         }
@@ -959,6 +1010,10 @@ void QuadPlane::update(void)
  */
 void QuadPlane::motors_output(void)
 {
+    if (esc_calibration && AP_Notify::flags.esc_calibration && plane.control_mode == QSTABILIZE) {
+        // output is direct from run_esc_calibration()
+        return;
+    }
     motors->output();
     if (motors->armed()) {
         plane.DataFlash.Log_Write_Rate(plane.ahrs, *motors, *attitude_control, *pos_control);
@@ -1014,6 +1069,9 @@ bool QuadPlane::init_mode(void)
         GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_CRITICAL, "QuadPlane mode refused");        
         return false;
     }
+
+    AP_Notify::flags.esc_calibration = false;
+
     switch (plane.control_mode) {
     case QSTABILIZE:
         init_stabilize();
@@ -1570,8 +1628,8 @@ bool QuadPlane::verify_vtol_land(void)
     }
 
     // at land_final_alt begin final landing
-    if (poscontrol.state == QPOS_LAND_DESCEND &&
-        plane.current_loc.alt < plane.next_WP_loc.alt+land_final_alt*100) {
+    float height_above_ground = plane.relative_ground_altitude(plane.g.rangefinder_landing);
+    if (poscontrol.state == QPOS_LAND_DESCEND && height_above_ground < land_final_alt) {
         poscontrol.state = QPOS_LAND_FINAL;
         pos_control->set_alt_target(inertial_nav.get_altitude());
         plane.gcs_send_text(MAV_SEVERITY_INFO,"Land final started");
@@ -1627,7 +1685,7 @@ int8_t QuadPlane::forward_throttle_pct(void)
         return 0;
     }
 
-    float deltat = (AP_HAL::millis() - vel_forward.lastt_ms) * 0.001f;
+    float deltat = (AP_HAL::millis() - vel_forward.last_ms) * 0.001f;
     if (deltat > 1 || deltat < 0) {
         vel_forward.integrator = 0;
         deltat = 0.1;
@@ -1636,7 +1694,7 @@ int8_t QuadPlane::forward_throttle_pct(void)
         // run at 10Hz
         return vel_forward.last_pct;
     }
-    vel_forward.lastt_ms = AP_HAL::millis();
+    vel_forward.last_ms = AP_HAL::millis();
     
     // work out the desired speed in forward direction
     const Vector3f &desired_velocity_cms = pos_control->get_desired_velocity();
@@ -1644,6 +1702,7 @@ int8_t QuadPlane::forward_throttle_pct(void)
     if (!plane.ahrs.get_velocity_NED(vel_ned)) {
         // we don't know our velocity? EKF must be pretty sick
         vel_forward.last_pct = 0;
+        vel_forward.integrator = 0;
         return 0;
     }
     Vector3f vel_error_body = ahrs.get_rotation_body_to_ned().transposed() * ((desired_velocity_cms*0.01f) - vel_ned);
@@ -1669,9 +1728,17 @@ int8_t QuadPlane::forward_throttle_pct(void)
     vel_forward.integrator += fwd_vel_error * deltat * vel_forward.gain * 100;
 
     // constrain to throttle range. This allows for reverse throttle if configured
-    vel_forward.integrator = constrain_float(vel_forward.integrator, plane.aparm.throttle_min, plane.aparm.throttle_max);
+    vel_forward.integrator = constrain_float(vel_forward.integrator, MIN(0,plane.aparm.throttle_min), plane.aparm.throttle_max);
     
-    vel_forward.last_pct = vel_forward.integrator;
+    // If we are below alt_cutoff then scale down the effect until it turns off at alt_cutoff and decay the integrator
+    float alt_cutoff = MAX(0,vel_forward_alt_cutoff);
+    float height_above_ground = plane.relative_ground_altitude(plane.g.rangefinder_landing);
+    vel_forward.last_pct = linear_interpolate(0, vel_forward.integrator,
+                                   height_above_ground, alt_cutoff, alt_cutoff+2);
+    if (vel_forward.last_pct == 0) {
+        // if the percent is 0 then decay the integrator
+        vel_forward.integrator *= 0.95f;
+    }
 
     return vel_forward.last_pct;
 }

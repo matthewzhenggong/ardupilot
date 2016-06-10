@@ -131,7 +131,7 @@ void Tracker::tracking_update_position(const mavlink_global_position_int_t &msg)
 
     // log vehicle as GPS2
     if (should_log(MASK_LOG_GPS)) {
-        DataFlash.Log_Write_GPS(gps, 1);
+        Log_Write_Vehicle_Pos(vehicle.location.lat, vehicle.location.lng, vehicle.location.alt, vehicle.heading, vehicle.ground_speed);
     }
 }
 
@@ -146,20 +146,20 @@ void Tracker::tracking_update_pressure(const mavlink_scaled_pressure_t &msg)
 
     // calculate altitude difference based on difference in barometric pressure
     float alt_diff = barometer.get_altitude_difference(local_pressure, aircraft_pressure);
-    if (!isnan(alt_diff)) {
+    if (!isnan(alt_diff) && !isinf(alt_diff)) {
         nav_status.alt_difference_baro = alt_diff + nav_status.altitude_offset;
+
+		if (nav_status.need_altitude_calibration) {
+			// we have done a baro calibration - zero the altitude
+			// difference to the aircraft
+			nav_status.altitude_offset = -alt_diff;
+			nav_status.alt_difference_baro = 0;
+			nav_status.need_altitude_calibration = false;
+		}
     }
 
-    if (nav_status.need_altitude_calibration) {
-        // we have done a baro calibration - zero the altitude
-        // difference to the aircraft
-        nav_status.altitude_offset = -nav_status.alt_difference_baro;
-        nav_status.alt_difference_baro = 0;
-        nav_status.need_altitude_calibration = false;
-    }
-
-    // log altitude difference
-    Log_Write_Vehicle_Baro(local_pressure, alt_diff);
+    // log vehicle baro data
+    Log_Write_Vehicle_Baro(aircraft_pressure, alt_diff);
 }
 
 /**
